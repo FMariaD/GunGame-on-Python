@@ -2,13 +2,15 @@ import pygame as pg
 import numpy as np
 from random import randint
 
-SCREEN_SIZE = (800, 700)
+SCREEN_SIZE = (1000, 800)
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 RED = (255, 0, 0)
-BLUE = (0, 0, 255)
+YELLOW = (255, 220, 0)
+ORANGE = (255, 150, 0)
 MAROON = (128, 0, 0)
 OLIVE = (0, 128, 128)
+TARGET_COLORS = [RED, YELLOW, ORANGE]
 FPS = 30
 
 pg.init()
@@ -20,7 +22,8 @@ clock = pg.time.Clock()
 screen.fill(BLACK)
 font = pg.font.Font(None, 50)
 g = 10  # ускорение свободного падения
-k = 0.9  # коэффициент замедления при ударении со стенками
+k = 0.8  # коэффициент замедления при ударении со стенками
+number_of_targets = 5
 counter = 0  # переменная для времени
 score = 0  # счет
 
@@ -58,10 +61,10 @@ class Ball:
 
 class Cannon:
     def __init__(self):
-        self.coord = (0, 300)
+        self.coord = (0, SCREEN_SIZE[1] // 2)
         self.angle = 0
         self.min_pow = 20
-        self.max_pow = 50
+        self.max_pow = 40
         self.power = randint(self.min_pow, self.max_pow)
         self.active = False
 
@@ -84,24 +87,43 @@ class Cannon:
 
 class Target:
     def __init__(self):
-        self.coords = (randint(50, 750), randint(50, 550))
+        self.coords = list((randint(50, SCREEN_SIZE[0] - 50),
+                            randint(50, SCREEN_SIZE[1] - 50)))
         self.radius = 30
-        self.is_alive = True
+        self.vel = list((randint(0, 7), randint(0, 7)))
+        self.color = TARGET_COLORS[randint(0, 2)]
 
     def draw(self):
-        pg.draw.circle(screen, RED, self.coords, self.radius)
+        pg.draw.circle(screen, self.color, self.coords, self.radius)
         pg.draw.circle(screen, WHITE, self.coords, self.radius - 10)
-        pg.draw.circle(screen, RED, self.coords, self.radius - 20)
+        pg.draw.circle(screen, self.color, self.coords, self.radius - 20)
 
     def hit_check(self, xy, ball_radius):
         (ball_x, ball_y) = xy
         (x, y) = self.coords
         distance = ((ball_x - x) ** 2 + (ball_y - y) ** 2) ** 0.5
         if distance <= (self.radius + ball_radius):
-            self.is_alive = False
+            self.coords = list((randint(50, SCREEN_SIZE[0] - 50),
+                                randint(50, SCREEN_SIZE[1] - 50)))
+            self.vel = list((randint(0, 5), randint(0, 5)))
+            self.color = TARGET_COLORS[randint(0, 2)]
             return 1
         else:
             return 0
+
+    def check_walls(self):
+        for i in (0, 1):
+            if self.coords[i] < self.radius:
+                self.coords[i] = self.radius
+                self.vel[i] = (-1) * self.vel[i]
+            elif self.coords[i] > SCREEN_SIZE[i] - self.radius:
+                self.coords[i] = SCREEN_SIZE[i] - self.radius
+                self.vel[i] = (-1) * self.vel[i]
+
+    def move(self):
+        for i in (0, 1):
+            self.coords[i] = self.coords[i] + self.vel[i]
+        self.check_walls()
 
 
 def clock_and_score_renewal(time0, score0):
@@ -114,12 +136,12 @@ def clock_and_score_renewal(time0, score0):
     text2 = font.render(str_format_time, True, OLIVE)
     str_format_score = "Score:  " + str(score0)
     text3 = font.render(str_format_score, True, MAROON)
-    pg.draw.rect(screen, WHITE, (0, 600, 800, 100))
-    screen.blit(text2, (500, 650))
-    screen.blit(text3, (150, 650))
+    pg.draw.rect(screen, WHITE, (0, SCREEN_SIZE[1], SCREEN_SIZE[0], 100))
+    screen.blit(text2, (SCREEN_SIZE[0] * 5 // 8, SCREEN_SIZE[1] + 50))
+    screen.blit(text3, (SCREEN_SIZE[0] * 3 // 16, SCREEN_SIZE[1] + 50))
 
 
-target = Target()
+target_list = list(Target() for q in range(number_of_targets))
 gun = Cannon()
 pg.display.update()
 finished = False
@@ -130,14 +152,15 @@ while not finished:
     clock.tick(FPS)
     counter += 1
     screen.fill(BLACK)
-    if not target.is_alive:
-        target = Target()
-    target.draw()
+    for target in target_list:
+        target.move()
+        target.draw()
     gun_end = gun.draw()
     ball_new_list = []
     for ball in ball_list:
         ball.move(counter)
-        score += target.hit_check(ball.coord, ball.rad)
+        for target in target_list:
+            score += target.hit_check(ball.coord, ball.rad)
         if ball.is_alive:
             ball.draw()
             ball_new_list.append(ball)  # отсеивает мёртвые шары
