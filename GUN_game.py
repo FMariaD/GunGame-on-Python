@@ -2,7 +2,7 @@ import pygame as pg
 import numpy as np
 from random import randint
 
-SCREEN_SIZE = (1000, 800)
+SCREEN_SIZE = (800, 800)  # минимальная ширина - 800
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 RED = (255, 0, 0)
@@ -10,8 +10,12 @@ YELLOW = (255, 220, 0)
 ORANGE = (255, 150, 0)
 MAROON = (128, 0, 0)
 OLIVE = (0, 128, 128)
+NAVY_BLUE = (0, 0, 128)
 TARGET_COLORS = [RED, YELLOW, ORANGE]
+DARK_YELLOW = (80, 60, 0)
+EYES = (80, 0, 0)
 FPS = 30
+FONT_SIZE = 50
 
 pg.init()
 
@@ -20,12 +24,15 @@ SCREEN_SIZE = (SCREEN_SIZE[0], SCREEN_SIZE[1] - 100)
 pg.display.set_caption("The gun of Khiryanov")
 clock = pg.time.Clock()
 screen.fill(BLACK)
-font = pg.font.Font(None, 50)
+
+font = pg.font.Font(None, FONT_SIZE)
 g = 10  # ускорение свободного падения
+(g_min, g_max) = (0, 50)
 k = 0.8  # коэффициент замедления при ударении со стенками
 number_of_targets = 5
 counter = 0  # переменная для времени
 score = 0  # счет
+scale0 = 10
 
 
 class Ball:
@@ -35,7 +42,7 @@ class Ball:
         self.vel = vel
         self.rad = 15
         self.is_alive = True
-        self.time = t0  # когда заспавнили шарик
+        self.time = t0  # время когда заспавнили шарик
 
     def draw(self):
         pg.draw.circle(screen, self.color, self.coord, self.rad)
@@ -55,7 +62,11 @@ class Ball:
         self.coord[0] = self.coord[0] + int(self.vel[0])
         self.coord[1] = self.coord[1] + int(vel_y)
         self.check_walls((self.vel[0], vel_y))
-        if self.coord[1] > (SCREEN_SIZE[1] + 2*self.rad):
+        if self.coord[1] > (SCREEN_SIZE[1] + 2 * self.rad):  # улетел вниз
+            self.is_alive = False
+        if g == 0 and self.coord[1] < (-2) * self.rad:  # улетел вверх и g=0
+            self.is_alive = False
+        if g == 0 and (t - self.time) / FPS > 5:  # если строго горизонтально
             self.is_alive = False
 
 
@@ -63,9 +74,9 @@ class Cannon:
     def __init__(self):
         self.coord = (0, SCREEN_SIZE[1] // 2)
         self.angle = 0
-        self.min_pow = 20
+        self.min_pow = 0
         self.max_pow = 40
-        self.power = randint(self.min_pow, self.max_pow)
+        self.power = randint(self.min_pow + 20, self.max_pow)
         self.active = False
 
     def draw(self):
@@ -129,16 +140,39 @@ class Target:
 def clock_and_score_renewal(time0, score0):
     time_passed = int(time0 / FPS)
     if time_passed < 60:
-        str_format_time = "Time:  " + str(time_passed) + "s"
+        str_format_time = "Time: " + str(time_passed) + "s"
     else:
-        str_format_time = "Time:  " + str(time_passed // 60) + "m  " + \
+        str_format_time = "Time: " + str(time_passed // 60) + "m " + \
                           str(time_passed % 60) + "s"
     text2 = font.render(str_format_time, True, OLIVE)
-    str_format_score = "Score:  " + str(score0)
+    str_format_score = "Score: " + str(score0)
     text3 = font.render(str_format_score, True, MAROON)
     pg.draw.rect(screen, WHITE, (0, SCREEN_SIZE[1], SCREEN_SIZE[0], 100))
-    screen.blit(text2, (SCREEN_SIZE[0] * 5 // 8, SCREEN_SIZE[1] + 50))
-    screen.blit(text3, (SCREEN_SIZE[0] * 3 // 16, SCREEN_SIZE[1] + 50))
+    screen.blit(text2, (SCREEN_SIZE[0] * 6 // 23, SCREEN_SIZE[1] + 35))
+    screen.blit(text3, (10, SCREEN_SIZE[1] + 35))
+
+
+def draw_background(color, scale):
+    a = 400
+    screen.fill(BLACK)
+    scr = pg.Surface((a, a), pg.SRCALPHA)
+    pg.draw.circle(scr, DARK_YELLOW, (200, 200), 100)
+    pg.draw.circle(scr, BLACK, (200, 200), 101, 1)
+    pg.draw.rect(scr, BLACK, (150, 250, 100, 20))
+    pg.draw.circle(scr, color, (150, 180), 20)
+    pg.draw.circle(scr, BLACK, (150, 180), 10)
+    pg.draw.circle(scr, BLACK, (150, 180), 21, 1)
+    pg.draw.circle(scr, color, (250, 180), 15)
+    pg.draw.circle(scr, BLACK, (250, 180), 7)
+    pg.draw.circle(scr, BLACK, (250, 180), 16, 1)
+    pg.draw.polygon(scr, BLACK,
+                    [(220, 166), (298, 136), (301, 144), (224, 173)])
+    pg.draw.polygon(scr, BLACK,
+                    [(182, 166), (178, 173), (99, 125), (104, 117)])
+
+    scr = pg.transform.scale(scr, (scale * SCREEN_SIZE[0] // 10,
+                                   scale * SCREEN_SIZE[1] // 10))
+    screen.blit(scr, (0, 0))
 
 
 target_list = list(Target() for q in range(number_of_targets))
@@ -148,10 +182,24 @@ finished = False
 ball_list = []
 ball_new_list = []
 
+
+def g_and_cannon_power_renewal():
+    font1 = pg.font.Font(None, FONT_SIZE * 4 // 5)
+    str_format_g = "g: " + str(g) + " (left&right)"
+    str_format_power = "power: " + str(gun.power) + " (up&down)"
+    text4 = font1.render(str_format_g, True, NAVY_BLUE)
+    text5 = font1.render(str_format_power, True, NAVY_BLUE)
+    screen.blit(text4, (SCREEN_SIZE[0] * 12 // 20, SCREEN_SIZE[1] + 20))
+    screen.blit(text5, (SCREEN_SIZE[0] * 12 // 20, SCREEN_SIZE[1] + 55))
+
+
 while not finished:
     clock.tick(FPS)
     counter += 1
-    screen.fill(BLACK)
+    if counter % FPS == 0:
+        EYES = (randint(0, 100), randint(0, 100), randint(0, 100))
+        scale0 = randint(0, 20)
+    draw_background(EYES, scale0)
     for target in target_list:
         target.move()
         target.draw()
@@ -171,7 +219,17 @@ while not finished:
         elif event.type == pg.MOUSEBUTTONDOWN:
             gun.set_angle(event.pos)
             ball_list.append(Ball(gun_end, gun.strike(), counter))
+        elif event.type == pg.KEYDOWN:
+            if event.key == pg.K_RIGHT and g != g_max:
+                g += 1
+            if event.key == pg.K_LEFT and g != g_min:
+                g -= 1
+            if event.key == pg.K_UP and gun.power != gun.max_pow:
+                gun.power += 1
+            if event.key == pg.K_DOWN and gun.power != gun.min_pow:
+                gun.power -= 1
     clock_and_score_renewal(counter, score)
+    g_and_cannon_power_renewal()
     pg.display.update()
 
 pg.quit()
