@@ -2,7 +2,7 @@ import pygame as pg
 import numpy as np
 from random import randint
 
-SCREEN_SIZE = (800, 800)  # минимальная ширина - 800
+SCREEN_SIZE = (1000, 800)  # минимальная ширина - 800
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 RED = (255, 0, 0)
@@ -32,7 +32,6 @@ k = 0.8  # коэффициент замедления при ударении �
 number_of_targets = 5
 counter = 0  # переменная для времени
 score = 0  # счет
-scale0 = 10
 
 
 class Ball:
@@ -152,7 +151,7 @@ def clock_and_score_renewal(time0, score0):
     screen.blit(text3, (10, SCREEN_SIZE[1] + 35))
 
 
-def draw_background(color, scale):
+def draw_background(color):
     a = 400
     screen.fill(BLACK)
     scr = pg.Surface((a, a), pg.SRCALPHA)
@@ -169,10 +168,10 @@ def draw_background(color, scale):
                     [(220, 166), (298, 136), (301, 144), (224, 173)])
     pg.draw.polygon(scr, BLACK,
                     [(182, 166), (178, 173), (99, 125), (104, 117)])
-
-    scr = pg.transform.scale(scr, (scale * SCREEN_SIZE[0] // 10,
-                                   scale * SCREEN_SIZE[1] // 10))
     screen.blit(scr, (0, 0))
+    screen.blit(scr, (SCREEN_SIZE[0] - a, 0))
+    screen.blit(scr, (0, SCREEN_SIZE[1] - a))
+    screen.blit(scr, (SCREEN_SIZE[0] - a, SCREEN_SIZE[1] - a))
 
 
 target_list = list(Target() for q in range(number_of_targets))
@@ -198,8 +197,7 @@ while not finished:
     counter += 1
     if counter % FPS == 0:
         EYES = (randint(0, 100), randint(0, 100), randint(0, 100))
-        scale0 = randint(0, 20)
-    draw_background(EYES, scale0)
+    draw_background(EYES)
     for target in target_list:
         target.move()
         target.draw()
@@ -216,8 +214,9 @@ while not finished:
     for event in pg.event.get():
         if event.type == pg.QUIT:
             finished = True
-        elif event.type == pg.MOUSEBUTTONDOWN:
+        elif event.type == pg.MOUSEMOTION:
             gun.set_angle(event.pos)
+        elif event.type == pg.MOUSEBUTTONDOWN:
             ball_list.append(Ball(gun_end, gun.strike(), counter))
         elif event.type == pg.KEYDOWN:
             if event.key == pg.K_RIGHT and g != g_max:
