@@ -69,6 +69,15 @@ class Ball:
         if g == 0 and self.age / FPS > 5:  # если строго горизонтально
             self.is_alive = False
 
+    def hit_check(self, enemy_balls):
+        for ball in enemy_balls:
+            (ball_x, ball_y) = ball.coord
+            (x, y) = self.coord
+            distance = ((ball_x - x) ** 2 + (ball_y - y) ** 2) ** 0.5
+            if distance <= (self.rad + ball.rad):
+                self.is_alive = False
+                ball.is_alive = False
+
 
 class Laser:
     def __init__(self, coord, vel, angle):
@@ -87,8 +96,10 @@ class Laser:
         pg.draw.line(screen, self.color, self.start_pos, self.coord, self.rad)
 
     def check_walls(self):
-        if self.coord[0] < -self.length or self.coord[0] > SCREEN_SIZE[0] + self.length or \
-                self.coord[1] < -self.length or self.coord[1] > SCREEN_SIZE[1] + self.length:
+        if self.coord[0] < -self.length \
+                or self.coord[0] > SCREEN_SIZE[0] + self.length \
+                or self.coord[1] < -self.length \
+                or self.coord[1] > SCREEN_SIZE[1] + self.length:
             self.is_alive = False
 
     def move(self):
@@ -98,31 +109,34 @@ class Laser:
 
 
 class Cannon:
-    def __init__(self):
+    def __init__(self, color, health, max_power):
         self.coord = [SCREEN_SIZE[0] // 2, SCREEN_SIZE[1] // 2]
+        self.color = color
         self.size = 25
         self.rad = self.size // 2
         self.angle = 0
+        self.end_pos = [0, 0]
         self.min_pow = 0
-        self.max_pow = 40
+        self.max_pow = max_power
         self.power = randint(self.min_pow + 20, self.max_pow)
         self.active = False
-        self.vel = [0, 0]
+        self.vel = [randint(-5, 5), randint(-5, 5)]
+        self.is_alive = True
+        self.health = health
 
     def draw(self):
-        end_pos = (int(self.coord[0] + self.power * 2 * np.cos(self.angle)),
-                   int(self.coord[1] + self.power * 2 * np.sin(self.angle)))
+        self.end_pos = [int(self.coord[0] + self.power*2 * np.cos(self.angle)),
+                        int(self.coord[1] + self.power*2 * np.sin(self.angle))]
         wheel_coord1 = (self.coord[0] - 2 * self.size + self.rad,
                         self.coord[1] + self.size + self.rad)
         wheel_coord2 = (self.coord[0] + 2 * self.size - self.rad,
                         self.coord[1] + self.size + self.rad)
-        pg.draw.line(screen, WHITE, self.coord, end_pos, 5)
-        pg.draw.rect(screen, WHITE,
+        pg.draw.line(screen, self.color, self.coord, self.end_pos, 5)
+        pg.draw.rect(screen, self.color,
                      [self.coord[0] - 2 * self.size, self.coord[1],
                       4 * self.size, self.size])
         pg.draw.circle(screen, WHITE, wheel_coord1, self.rad)
         pg.draw.circle(screen, WHITE, wheel_coord2, self.rad)
-        return end_pos
 
     def strike(self):
         vel = (int(self.power * np.cos(self.angle)),
@@ -134,9 +148,36 @@ class Cannon:
         self.angle = np.arctan2(mouse_pos[1] - self.coord[1],
                                 mouse_pos[0] - self.coord[0])
 
+    def check_walls(self):
+        for i in (0, 1):
+            if self.coord[i] < self.size*2:
+                self.coord[i] = self.size*2
+                self.vel[i] *= -1
+            elif self.coord[i] > SCREEN_SIZE[i] - self.size*2:
+                self.coord[i] = SCREEN_SIZE[i] - self.size*2
+                self.vel[i] *= -1
+
+    def move_random(self):
+        self.coord[0] += self.vel[0]
+        self.coord[1] += self.vel[1]
+        self.check_walls()
+
     def move(self):
         self.coord[0] += 10 * self.vel[0]
         self.coord[1] += 10 * self.vel[1]
+
+    def hit_check(self, ball):
+        (ball_x, ball_y) = ball.coord
+        (x, y) = self.coord
+        distance = [abs(ball_x - x), abs(ball_y - (y + self.size))]
+        if distance[0] <= (self.size*2 + ball.rad) and \
+                distance[1] <= (self.size + ball.rad):
+            self.health -= 10
+
+    def alive_check(self):
+        if self.health < 0:
+            self.is_alive = False
+            self.health = 0
 
 
 class Target1:
@@ -230,28 +271,45 @@ class Manager:
         self.targets = list(Target1() for k in range(number_of_targets - 1))
         self.target_2 = Target2()
         self.targets.append(self.target_2)
-        self.gun = Cannon()
-        self.enemy = Cannon()
+        self.gun = Cannon(WHITE, 100, 40)
+        self.enemy = Cannon(MAROON, 20, 20)
         self.balls = []  # balls & lasers actually
-        self.balls_new = []
+        self.enemy_balls = []
         self.score = 0
+
+    def enemy_renew(self):
+        pass  # FIXME
 
     def move_and_draw(self):
         self.gun.move()
-        gun_end = self.gun.draw()
+        self.enemy.move_random()
+        self.enemy.check_walls()
+        self.gun.draw()
+        self.enemy.draw()
         for target in self.targets:
             target.move()
             target.draw()
         ball_new_list = []
         for ball in self.balls:
             ball.move()
-            for target in self.targets:
-                self.score += target.hit_check(ball.coord, ball.rad)
+            self.enemy.hit_check(ball)
             if ball.is_alive:
                 ball.draw()
                 ball_new_list.append(ball)  # отсеивает мёртвые шары
+            for target in self.targets:
+                self.score += target.hit_check(ball.coord, ball.rad)
         self.balls = ball_new_list
-        return gun_end
+        ball_new_list = []
+        for ball in self.enemy_balls:
+            ball.move()
+            self.gun.hit_check(ball)
+            ball.hit_check(self.balls)
+            if ball.is_alive:
+                ball.draw()
+                ball_new_list.append(ball)  # отсеивает мёртвые шары
+            for target in self.targets:
+                target.hit_check(ball.coord, ball.rad)
+        self.enemy.balls = ball_new_list
 
     def check_pressed_keys(self):
         self.gun.vel = [0, 0]
@@ -266,7 +324,7 @@ class Manager:
                 self.gun.vel[0] += 1
 
     def event_handler(self, events):
-        gun_end = self.move_and_draw()
+        gun_end = self.gun.end_pos
         done = False
         for event in events:
             if event.type == pg.QUIT:
@@ -277,7 +335,8 @@ class Manager:
                 if event.button == 1:  # левая кнопка мыши
                     self.balls.append(Ball(gun_end, self.gun.strike()))
                 if event.button == 3:  # правая кнопка мыши
-                    self.balls.append(Laser(gun_end, self.gun.strike(), self.gun.angle))
+                    self.balls.append(Laser(gun_end,
+                                            self.gun.strike(), self.gun.angle))
             elif event.type == pg.KEYDOWN:
                 if event.key == pg.K_RIGHT and self.g != g_max:
                     self.g += 1
@@ -285,7 +344,8 @@ class Manager:
                     self.g -= 1
                 if event.key == pg.K_UP and self.gun.power != self.gun.max_pow:
                     self.gun.power += 1
-                if event.key == pg.K_DOWN and self.gun.power != self.gun.min_pow:
+                if event.key == pg.K_DOWN and \
+                        self.gun.power != self.gun.min_pow:
                     self.gun.power -= 1
         return done
 
@@ -337,6 +397,10 @@ def draw_background(color):
     screen.blit(scr, (SCREEN_SIZE[0] - a, SCREEN_SIZE[1] - a))
 
 
+def end_screen():
+    pass  # FIXME
+
+
 mgr = Manager(g)
 pg.display.update()
 finished = False
@@ -348,7 +412,17 @@ while not finished:
         EYES = (randint(0, 100), randint(0, 100), randint(0, 100))
     if counter % randint(1, FPS) == 0:
         mgr.targets[number_of_targets - 1].renew_velocity()
+    if counter % (randint(1, 4)*FPS) == 0:
+        mgr.enemy.set_angle(mgr.gun.coord)
+        vel = mgr.enemy.strike()
+        ball = Ball(mgr.enemy.end_pos, vel)
+        mgr.enemy_balls.append(ball)
     draw_background(EYES)
+    mgr.move_and_draw()
+    if mgr.gun.alive_check is not True:
+        end_screen()
+    if mgr.gun.alive_check is not True:
+        mgr.enemy_renew()
     mgr.check_pressed_keys()
     finished = mgr.event_handler(pg.event.get())
     clock_and_score_renewal(counter, mgr.score)
